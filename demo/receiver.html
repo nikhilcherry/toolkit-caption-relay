@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>CaptionRelay — Receiver</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  #status {
+    position: fixed;
+    top: 12px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #6e7681;
+    letter-spacing: 0.02em;
+  }
+  #status.open { color: #3fb950; }
+  #status.connecting { color: #d29922; }
+  #captions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .caption {
+    font-size: clamp(1.5rem, 6vw, 3rem);
+    font-weight: 700;
+    line-height: 1.15;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 1.2s ease, transform 1.2s ease;
+  }
+  .caption .who {
+    display: block;
+    font-size: 0.4em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+    margin-bottom: 2px;
+  }
+  .caption.fade-1 { opacity: 0.55; }
+  .caption.fade-2 { opacity: 0.28; }
+</style>
+</head>
+<body>
+  <div id="status" class="connecting">connecting…</div>
+  <div id="captions"></div>
+
+<script type="module">
+  import { RelayClient } from '../relay-client.js';
+
+  const statusEl = document.getElementById('status');
+  const captionsEl = document.getElementById('captions');
+
+  const url = `ws://${location.hostname}:8787`;
+  const relay = new RelayClient(url, { room: 'captions', reconnectMs: 1500, maxQueue: 50 });
+
+  function setStatus(status) {
+    statusEl.className = status;
+    statusEl.textContent = status === 'open' ? 'connected' : status === 'connecting' ? 'connecting…' : 'reconnecting…';
+  }
+
+  relay.on('open', () => setStatus('open'));
+  relay.on('close', () => setStatus('connecting'));
+
+  const MAX_LINES = 3;
+  let lines = [];
+
+  relay.on('message', (obj) => {
+    if (!obj || typeof obj.text !== 'string') return;
+    lines.unshift(obj);
+    lines = lines.slice(0, MAX_LINES);
+    render();
+  });
+
+  function render() {
+    captionsEl.innerHTML = '';
+    lines.forEach((line, i) => {
+      const div = document.createElement('div');
+      div.className = `caption${i > 0 ? ` fade-${i}` : ''}`;
+      div.style.color = line.color || '#e6edf3';
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = line.who || '';
+      div.appendChild(who);
+      div.appendChild(document.createTextNode(line.text));
+      captionsEl.appendChild(div);
+    });
+  }
+
+  setStatus(relay.status);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "toolkit-caption-relay",
+  "version": "1.0.0",
+  "description": "Tiny WebSocket broadcast server + reconnecting browser client for pushing JSON events from a laptop to phones/tablets on the same network.",
+  "type": "module",
+  "main": "relay-server.js",
+  "scripts": {
+    "start": "node relay-server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
