@@ -1,9 +1,32 @@
 # CaptionRelay
 
+<p align="center">
+  <img alt="node" src="https://img.shields.io/badge/node-ws_broadcast_server-339933">
+  <img alt="reconnect" src="https://img.shields.io/badge/client-auto--reconnect_%2B_queueing-06b6d4">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green">
+</p>
+
 A tiny WebSocket broadcast server plus a reconnecting browser client, for
 pushing JSON events from a laptop to phones/tablets on the same network.
 Built for demos where a phone acts as a second screen, controller, or
 smart-glasses stand-in.
+
+```mermaid
+sequenceDiagram
+    participant Laptop as Laptop (sender.html)
+    participant Server as CaptionRelay server (ws://:8787/<room>)
+    participant Phone as Phone (receiver.html)
+
+    Phone->>Server: connect ws://host:8787/captions
+    Laptop->>Server: connect ws://host:8787/captions
+    Laptop->>Server: send({who, color, text})
+    Server-->>Phone: broadcast to every other client in "captions"
+    Note over Laptop,Server: If the phone drops mid-demo...
+    Phone--xServer: connection lost
+    Laptop->>Server: send(...) — queued client-side (maxQueue)
+    Phone->>Server: reconnect (fixed interval)
+    Server-->>Phone: queued messages flush through
+```
 
 ## Quick start
 
@@ -66,3 +89,7 @@ strings (literal `../`, deeply nested, percent-encoded) against
 `resolveSafePath` on the server side, plus room routing and broadcast
 fan-out (never echoes to the sender, skips non-open peers, never crosses
 rooms). All passing, no test-only dependencies required.
+
+## License
+
+MIT
