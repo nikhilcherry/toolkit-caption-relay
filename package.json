@@ -5,7 +5,8 @@
   "type": "module",
   "main": "relay-server.js",
   "scripts": {
-    "start": "node relay-server.js"
+    "start": "node relay-server.js",
+    "test": "node --test"
   },
   "license": "MIT",
   "dependencies": {

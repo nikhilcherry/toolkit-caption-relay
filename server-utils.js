@@ -16,7 +16,14 @@ const DEFAULT_ROOM = 'default';
  */
 export function getRoomFromUrl(url) {
   const cleaned = (url || '/').split('?')[0].replace(/^\/+|\/+$/g, '');
-  return cleaned.length > 0 ? decodeURIComponent(cleaned) : DEFAULT_ROOM;
+  if (cleaned.length === 0) return DEFAULT_ROOM;
+  try {
+    return decodeURIComponent(cleaned);
+  } catch {
+    // Malformed percent-encoding (e.g. "/%"): fall back to the raw path
+    // rather than letting a URIError crash the connection handler.
+    return cleaned;
+  }
 }
 
 /**
@@ -24,12 +31,25 @@ export function getRoomFromUrl(url) {
  * traversal (e.g. "/../../etc/passwd" or an encoded equivalent).
  * @param {string} url - the raw request URL.
  * @param {string} rootDir - absolute directory requests are served from.
- * @returns {string} an absolute path guaranteed to live inside rootDir.
+ * @returns {string|null} an absolute path guaranteed to live inside rootDir,
+ *   or null when the URL is malformed or resolves outside rootDir.
  */
 export function resolveSafePath(url, rootDir) {
-  const decoded = decodeURIComponent((url || '/').split('?')[0]);
+  let decoded;
+  try {
+    decoded = decodeURIComponent((url || '/').split('?')[0]);
+  } catch {
+    return null; // malformed percent-encoding
+  }
+  if (decoded.includes('\0')) return null;
   const normalized = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
-  return path.join(rootDir, normalized);
+  const resolved = path.join(rootDir, normalized);
+  // Belt and braces: the stripping above should already keep us inside
+  // rootDir, but never return a path outside it no matter what.
+  if (resolved !== rootDir && !resolved.startsWith(path.normalize(rootDir + path.sep))) {
+    return null;
+  }
+  return resolved;
 }
 
 /**

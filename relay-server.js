@@ -44,7 +44,16 @@ const MIME_TYPES = {
 /** @type {Map<string, Set<import('ws').WebSocket>>} room name -> set of sockets in that room */
 const rooms = new Map();
 
-const wss = new WebSocketServer({ port: WS_PORT });
+// Caption events are small JSON blobs; 1 MiB is generous headroom while
+// keeping a misbehaving client from buffering 100 MiB frames (the ws default).
+const MAX_PAYLOAD_BYTES = 1024 * 1024;
+
+// Phones on flaky Wi-Fi often vanish without a TCP FIN, leaving zombie
+// sockets in the room. Ping every client on this interval and terminate
+// any that never answered the previous ping.
+const HEARTBEAT_MS = 30_000;
+
+const wss = new WebSocketServer({ port: WS_PORT, maxPayload: MAX_PAYLOAD_BYTES });
 
 wss.on('connection', (ws, req) => {
   const room = getRoomFromUrl(req.url);
@@ -52,6 +61,11 @@ wss.on('connection', (ws, req) => {
   const peers = rooms.get(room);
   peers.add(ws);
   console.log(`[connect]    room="${room}" clients=${peers.size}`);
+
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   ws.on('message', (data, isBinary) => {
     broadcast(rooms, room, ws, data, isBinary);
@@ -68,9 +82,27 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+const heartbeatTimer = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate(); // fires 'close', which removes it from its room
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, HEARTBEAT_MS);
+
+wss.on('close', () => clearInterval(heartbeatTimer));
+
 const httpServer = createServer(async (req, res) => {
   try {
     let filePath = resolveSafePath(req.url, ROOT_DIR);
+    if (filePath === null) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
     let stats = await stat(filePath).catch(() => null);
 
     if (stats?.isDirectory()) {

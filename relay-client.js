@@ -110,7 +110,7 @@ export class RelayClient extends EventEmitter {
    * @returns {void}
    */
   _connect() {
-    this.status = this._ws ? 'connecting' : this.status;
+    this.status = 'connecting';
     const ws = new WebSocket(this._fullUrl());
     this._ws = ws;
 

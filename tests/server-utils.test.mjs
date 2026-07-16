@@ -34,6 +34,14 @@ test('a percent-encoded room name is decoded', () => {
   assert.equal(getRoomFromUrl('/team%20alpha'), 'team alpha');
 });
 
+test('malformed percent-encoding falls back to the raw path instead of throwing', () => {
+  // decodeURIComponent('%') throws URIError; a crash here would take down
+  // the whole server from inside the ws connection handler.
+  assert.doesNotThrow(() => getRoomFromUrl('/%'));
+  assert.equal(getRoomFromUrl('/%'), '%');
+  assert.equal(getRoomFromUrl('/bad%zz'), 'bad%zz');
+});
+
 // --- resolveSafePath: the security boundary ---
 
 test('a normal file path resolves under root', () => {
@@ -91,6 +99,15 @@ test('every resolved path stays a descendant of root for a battery of attack str
       `attack string ${JSON.stringify(attack)} escaped root: got ${resolved}`,
     );
   }
+});
+
+test('a malformed percent-encoded URL resolves to null, not a throw', () => {
+  assert.doesNotThrow(() => resolveSafePath('/%', ROOT));
+  assert.equal(resolveSafePath('/%', ROOT), null);
+});
+
+test('a URL containing a null byte resolves to null', () => {
+  assert.equal(resolveSafePath('/demo/sender.html%00.png', ROOT), null);
 });
 
 // --- broadcast ---
