@@ -41,3 +41,28 @@ captions, it just delays them.
 Any app that wants a phone as a second display or controller — live
 captions, dashboards, game controllers, remote triggers, or a stand-in for
 smart glasses.
+
+## Tests
+
+```bash
+node --test
+```
+
+Zero test coverage previously. `relay-server.js` starts a real
+`WebSocketServer` + `http.Server` the moment it's imported — never
+something a test should trigger — and `RelayClient` constructs a real
+`WebSocket` in its constructor, so both are exercised through fakes rather
+than real sockets/servers: the client tests replace `globalThis.WebSocket`
+with a small fake that records what's sent and lets the test drive
+open/message/close by hand; the server's pure decision logic (which room
+a connection lands in, which peers a message broadcasts to, and —the one
+real security boundary in this repo— which filesystem path a request is
+allowed to read) was pulled out into `server-utils.js` so it's testable
+without a running server at all.
+
+31 tests: reconnect scheduling and the message queue's drop-oldest-at-
+capacity behavior on the client side; a battery of path-traversal attack
+strings (literal `../`, deeply nested, percent-encoded) against
+`resolveSafePath` on the server side, plus room routing and broadcast
+fan-out (never echoes to the sender, skips non-open peers, never crosses
+rooms). All passing, no test-only dependencies required.

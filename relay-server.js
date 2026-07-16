@@ -21,10 +21,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getRoomFromUrl, resolveSafePath, broadcast } from './server-utils.js';
 
 const WS_PORT = Number(process.env.PORT) || 8787;
 const HTTP_PORT = Number(process.env.HTTP_PORT) || 8788;
-const DEFAULT_ROOM = 'default';
 
 const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,34 +44,6 @@ const MIME_TYPES = {
 /** @type {Map<string, Set<import('ws').WebSocket>>} room name -> set of sockets in that room */
 const rooms = new Map();
 
-/**
- * Extracts the room name from a WebSocket connection's request URL.
- * @param {string} [url] - the raw request URL, e.g. "/captions".
- * @returns {string} the room name, or "default" when no path is given.
- */
-function getRoomFromUrl(url) {
-  const cleaned = (url || '/').split('?')[0].replace(/^\/+|\/+$/g, '');
-  return cleaned.length > 0 ? decodeURIComponent(cleaned) : DEFAULT_ROOM;
-}
-
-/**
- * Forwards raw data to every OTHER open socket in the same room.
- * @param {string} room - the room to broadcast within.
- * @param {import('ws').WebSocket} sender - the socket the message came from (excluded).
- * @param {import('ws').RawData} data - the raw message payload, forwarded verbatim.
- * @param {boolean} isBinary - whether the original frame was binary.
- * @returns {void}
- */
-function broadcast(room, sender, data, isBinary) {
-  const peers = rooms.get(room);
-  if (!peers) return;
-  for (const peer of peers) {
-    if (peer !== sender && peer.readyState === peer.OPEN) {
-      peer.send(data, { binary: isBinary });
-    }
-  }
-}
-
 const wss = new WebSocketServer({ port: WS_PORT });
 
 wss.on('connection', (ws, req) => {
@@ -82,7 +54,7 @@ wss.on('connection', (ws, req) => {
   console.log(`[connect]    room="${room}" clients=${peers.size}`);
 
   ws.on('message', (data, isBinary) => {
-    broadcast(room, ws, data, isBinary);
+    broadcast(rooms, room, ws, data, isBinary);
   });
 
   ws.on('close', () => {
@@ -96,20 +68,9 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-/**
- * Resolves a request URL to a file under ROOT_DIR, preventing path traversal.
- * @param {string} url - the raw request URL.
- * @returns {string} an absolute path guaranteed to live inside ROOT_DIR.
- */
-function resolveSafePath(url) {
-  const decoded = decodeURIComponent((url || '/').split('?')[0]);
-  const normalized = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
-  return path.join(ROOT_DIR, normalized);
-}
-
 const httpServer = createServer(async (req, res) => {
   try {
-    let filePath = resolveSafePath(req.url);
+    let filePath = resolveSafePath(req.url, ROOT_DIR);
     let stats = await stat(filePath).catch(() => null);
 
     if (stats?.isDirectory()) {
